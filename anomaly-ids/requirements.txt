@@ -1,0 +1,13 @@
+# Core pipeline
+pandas>=1.5
+numpy>=1.23
+scikit-learn>=1.2
+click>=8.0
+jinja2>=3.0
+# Live capture
+scapy>=2.5
+# Dashboards
+streamlit>=1.30
+altair>=5.0
+# Tests
+pytest>=7.0

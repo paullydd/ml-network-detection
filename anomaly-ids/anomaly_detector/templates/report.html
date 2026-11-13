@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Network anomaly report · {{ generated }}</title>
+<style>
+  body { margin: 0; background: #f6f7f9; color: #1d2329; font: 15px/1.5 -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 1100px; margin: 0 auto; padding: 40px 24px 64px; }
+  h1 { font-size: 28px; margin: 0 0 4px; }
+  h2 { font-size: 18px; margin: 36px 0 12px; }
+  .meta { color: #5f6b76; margin: 0 0 28px; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+  .stat { background: #fff; border: 1px solid #dfe3e8; border-radius: 10px; padding: 14px 16px; }
+  .stat b { display: block; font-size: 26px; font-variant-numeric: tabular-nums; }
+  .stat span { color: #5f6b76; font-size: 13.5px; }
+  table { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid #dfe3e8; border-radius: 10px; overflow: hidden; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid #edf0f3; vertical-align: top; }
+  th { font-size: 13px; color: #5f6b76; font-weight: 600; background: #fafbfc; }
+  td.num { font-variant-numeric: tabular-nums; text-align: right; }
+  td.mono { font-family: ui-monospace, Menlo, monospace; font-size: 13px; }
+  .sev { display: inline-block; font-size: 12.5px; font-weight: 600; padding: 1px 8px; border-radius: 999px; }
+  .Critical { background: #fde2df; color: #9b2216; }
+  .High { background: #fdeccc; color: #8a4b00; }
+  .Medium { background: #fff6cc; color: #6b5800; }
+  .Low { background: #e7f1ec; color: #2d6a4f; }
+  .why { color: #5f6b76; font-size: 13.5px; }
+  .note { color: #5f6b76; font-size: 13.5px; max-width: 75ch; }
+  .empty { background: #fff; border: 1px solid #dfe3e8; border-radius: 10px; padding: 20px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Network anomaly report</h1>
+  <p class="meta">Generated {{ generated }} by anomaly-detect</p>
+
+  <div class="stats">
+    <div class="stat"><b>{{ total }}</b><span>Flows analyzed</span></div>
+    <div class="stat"><b>{{ n_anomalies }}</b><span>Flagged as anomalies ({{ "%.1f"|format(rate) }}%)</span></div>
+    {% for name in ["Critical", "High", "Medium", "Low"] %}
+    <div class="stat"><b>{{ sev_counts[name] }}</b><span><span class="sev {{ name }}">{{ name }}</span></span></div>
+    {% endfor %}
+  </div>
+
+  <h2>Most unusual flows{% if top_n %} (top {{ top_n }}){% endif %}</h2>
+  {% if rows %}
+  <table>
+    <thead><tr><th>Severity</th><th>Score</th><th>Source</th><th>Destination</th><th>Proto</th><th>Packets</th><th>Bytes</th><th>Duration</th><th>Failed logons</th><th>Why it stands out</th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+      <tr>
+        <td><span class="sev {{ r.severity }}">{{ r.severity }}</span></td>
+        <td class="num mono">{{ r.score }}</td>
+        <td class="mono">{{ r.src }}</td>
+        <td class="mono">{{ r.dst }}</td>
+        <td>{{ r.proto }}</td>
+        <td class="num">{{ r.packets }}</td>
+        <td class="num">{{ r.bytes }}</td>
+        <td class="num">{{ r.duration }}</td>
+        <td class="num">{{ r.failed_logins }}</td>
+        <td class="why">{{ r.why or "Unusual combination of features" }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">No flows were flagged.</p>
+  {% endif %}
+
+  {% if by_src %}
+  <h2>Sources with the most flagged flows</h2>
+  <table style="max-width:420px">
+    <thead><tr><th>Source IP</th><th>Flagged flows</th></tr></thead>
+    <tbody>{% for s in by_src %}<tr><td class="mono">{{ s.src_ip }}</td><td class="num">{{ s.count }}</td></tr>{% endfor %}</tbody>
+  </table>
+  {% endif %}
+
+  <h2>How to read this</h2>
+  <p class="note">Scores come from an Isolation Forest trained on these flows. A score below 0 means the flow was flagged, and lower scores are more unusual.
+  Severity bands: Critical below {{ bands[0][0] }}, High below {{ bands[1][0] }}, Medium below {{ bands[2][0] }}, otherwise Low.
+  "Why it stands out" lists the features furthest from the average flow. The model finds unusual traffic, not proven attacks, so each flagged flow is a lead to investigate.</p>
+</main>
+</body>
+</html>

@@ -1,2 +1,0 @@
-[console_scripts]
-anomaly-detect = anomaly_detector.cli:cli

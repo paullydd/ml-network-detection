@@ -1,77 +1,61 @@
-import streamlit as st
-import pandas as pd
-import altair as alt
+"""Live dashboard: watch flows scored by `anomaly-detect live` as they arrive.
+
+Start it with `anomaly-detect dashboard --live` while a live capture is running.
+"""
+import sys
 import time
-import os
+from pathlib import Path
 
-LIVE_PATH = "data/live/live_predictions.csv"
+import altair as alt
+import pandas as pd
+import streamlit as st
 
-st.set_page_config(
-    page_title="Live Network Anomaly Detection",
-    layout="wide"
-)
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from anomaly_detector import paths  # noqa: E402
+from anomaly_detector.features import severity  # noqa: E402
 
-st.title("🛰 Live Network Anomaly Dashboard")
-st.write("Updates automatically as new network flows are captured and scored.")
+REFRESH_SECONDS = 2
 
-# Auto-refresh every 2 seconds
-st_autorefresh = st.experimental_rerun
+st.set_page_config(page_title="Live Network Anomaly Detection", layout="wide")
+st.title("Live network anomaly detection")
 
-REFRESH_RATE = 2000  # ms
+paused = st.sidebar.toggle("Pause updates", value=False)
+window = st.sidebar.slider("Show the most recent flows", 50, 2000, 500, step=50)
 
-st_autorefresh(interval=REFRESH_RATE, limit=None)
+live_path = paths.live_predictions_csv()
+if not live_path.exists() or live_path.stat().st_size == 0:
+    st.info("Waiting for live data. Start a capture with: sudo anomaly-detect live --iface en0")
+    df = None
+else:
+    df = pd.read_csv(live_path)
 
-if not os.path.exists(LIVE_PATH):
-    st.warning("Waiting for live data... Start capture with: anomaly-detect live")
-    st.stop()
+if df is not None and not df.empty:
+    if "severity" not in df.columns:  # files written by older versions
+        df["severity"] = df["anomaly_score"].apply(severity)
+    df["time"] = pd.to_datetime(df["timestamp"], unit="s")
+    df = df.sort_values("time").tail(window)
 
-df = pd.read_csv(LIVE_PATH)
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Flows shown", len(df))
+    c2.metric("Anomalies", int((df["label"] == "anomaly").sum()))
+    c3.metric("Critical", int((df["severity"] == "Critical").sum()))
 
-# Convert scores to severity colors
-def severity_color(score):
-    if score < -0.2:
-        return "Critical"
-    elif score < -0.1:
-        return "High"
-    elif score < -0.05:
-        return "Medium"
-    else:
-        return "Low"
+    st.subheader("Anomaly score over time")
+    st.altair_chart(
+        alt.Chart(df).mark_circle(size=40).encode(
+            x=alt.X("time:T", title="Time"),
+            y=alt.Y("anomaly_score:Q", title="Anomaly score"),
+            color=alt.Color("label:N", title="Label"),
+            tooltip=["src_ip", "dst_ip", "dport", "anomaly_score", "severity"],
+        ).properties(height=280),
+        use_container_width=True,
+    )
 
-df["severity"] = df["anomaly_score"].apply(severity_color)
+    st.subheader("Latest flows")
+    cols = ["time", "severity", "anomaly_score", "src_ip", "sport", "dst_ip", "dport", "proto", "label"]
+    st.dataframe(df.sort_values("time", ascending=False)[[c for c in cols if c in df.columns]],
+                 height=420, use_container_width=True)
 
-# Summary metrics
-col1, col2, col3 = st.columns(3)
-
-col1.metric("Total Live Flows", len(df))
-col2.metric("Total Anomalies", (df["label"] == "anomaly").sum())
-col3.metric("Critical Alerts", (df["severity"] == "Critical").sum())
-
-st.markdown("---")
-
-# Anomaly score chart
-st.subheader("📉 Live Anomaly Score Timeline")
-
-line_chart = alt.Chart(df).mark_line().encode(
-    x="timestamp:T",
-    y="anomaly_score",
-    color="label"
-).properties(height=300)
-
-st.altair_chart(line_chart, use_container_width=True)
-
-st.markdown("---")
-
-# Live table
-st.subheader("🚨 Live Flow Alerts")
-
-# Show newest first
-df = df.sort_values("timestamp", ascending=False)
-
-st.dataframe(
-    df[[
-        "src_ip", "dst_ip", "proto", "sport", "dport",
-        "anomaly_score", "severity", "label", "timestamp"
-    ]],
-    height=400
-)
+if not paused:
+    time.sleep(REFRESH_SECONDS)
+    st.rerun()

@@ -1,26 +1,33 @@
-import os
-import subprocess
+"""Runs the batch pipeline stages in order."""
+from . import build, logs, model, pcap, report
+
 
 def run_logs():
-    subprocess.run(["python3", "src/preprocess/log_loader.py"])
+    return logs.run()
+
 
 def run_pcap():
-    subprocess.run(["python3", "src/preprocess/pcap_features.py"])
+    return pcap.run()
+
 
 def run_features():
-    subprocess.run(["python3", "src/preprocess/feature_builder.py"])
+    return build.run()
 
-def run_predict():
-    subprocess.run(["python3", "src/models/predict.py"])
+
+def run_predict(retrain: bool = True, contamination: float = model.CONTAMINATION):
+    return model.run(retrain=retrain, contamination=contamination)
+
 
 def run_report():
-    subprocess.run(["python3", "src/reporting/html_reporter.py"])
+    return report.run()
 
-def run_all():
-    print("\n=== Running Full Anomaly Detection Pipeline ===\n")
+
+def run_all(retrain: bool = True, contamination: float = model.CONTAMINATION):
+    print("\n=== Network anomaly detection pipeline ===\n")
     run_logs()
     run_pcap()
     run_features()
-    run_predict()
-    run_report()
-    print("\n=== Pipeline Complete ===\n")
+    run_predict(retrain=retrain, contamination=contamination)
+    path = run_report()
+    print(f"\n=== Done. Open {path} ===\n")
+    return path
